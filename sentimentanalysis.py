@@ -7,10 +7,11 @@ import numpy as np
 
 from bs4 import BeautifulSoup
 from nltk.corpus import stopwords
+from collections import Counter
 
 
 def review_to_wordlist(review, remove_stopwords=False):
-  review_text = BeautifulSoup(review).get_text()
+  review_text = BeautifulSoup(review, "html5lib").get_text()
   review_text = re.sub("[^a-zA-Z]"," ", review_text)
   words = review_text.lower().split()
   if remove_stopwords:
@@ -64,15 +65,15 @@ for review in reviews:
   if len(review) > 0:
     sentences.append(review_to_wordlist(review.decode('utf8').strip(), remove_stopwords=True))
 
+word_dict = build_vocab(sentences, max_words=5000)
 vec_reviews = vectorize(sentences, word_dict, verbose=True)
 
 from keras.preprocessing import sequence
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation
-from keras.layers import Embedding
-from keras.layers import Convolution1D, GlobalMaxPooling1D
-from keras.datasets import imdb
-from keras import backend as K
+from keras.layers.core import Dense, Dropout, Activation
+from keras.layers.embeddings import Embedding
+from keras.layers.convolutional import Conv1D
+from keras.layers.pooling import GlobalMaxPooling1D
 
 max_features = 5000
 maxlen = 400
@@ -88,10 +89,10 @@ test_data = vec_reviews[20000:]
 y_train = labels[0:20000]
 y_test = labels[20000:]
 X_train = sequence.pad_sequences(train_data, maxlen=maxlen)
-X_train = sequence.pad_sequences(test_data, maxlen=maxlen)
+X_test = sequence.pad_sequences(test_data, maxlen=maxlen)
 
 print('X_train shape:', X_train.shape)
-print('X_test shape:', X_train.shape)
+print('X_test shape:', X_test.shape)
 
 model = Sequential()
 
@@ -100,11 +101,10 @@ model.add(Embedding(max_features,
                     input_length=maxlen,
                     dropout=0.2))
 
-model.add(Convolution1D(nb_filter=nb_filter,
-                        filter_length=filter_length,
-                        border_mode='valid',
-                        activation='relu',
-                        subsample_length=1))
+model.add(Conv1D(filters=nb_filter,
+                        kernel_size=filter_length,
+                        padding='valid',
+                        activation='relu'))
 
 model.add(GlobalMaxPooling1D())
 
@@ -120,5 +120,26 @@ model.compile(loss='binary_crossentropy',
               metrics=['accuracy'])
 model.fit(X_train, y_train,
           batch_size=batch_size,
-          nb_epoch=nb_epoch,
+          epochs=nb_epoch,
           validation_data=(X_test, y_test))
+
+
+def clean_str(string):
+    """
+    Tokenization/string cleaning for dataset
+    Every dataset is lower cased except
+    """
+    string = re.sub(r"[^A-Za-z0-9(),!?\'\`]", " ", string)     
+    string = re.sub(r"\'s", " \'s", string) 
+    string = re.sub(r"\'ve", " \'ve", string) 
+    string = re.sub(r"n\'t", " n\'t", string) 
+    string = re.sub(r"\'re", " \'re", string) 
+    string = re.sub(r"\'d", " \'d", string) 
+    string = re.sub(r"\'ll", " \'ll", string) 
+    string = re.sub(r",", " , ", string) 
+    string = re.sub(r"!", " ! ", string) 
+    string = re.sub(r"\(", " \( ", string) 
+    string = re.sub(r"\)", " \) ", string) 
+    string = re.sub(r"\?", " \? ", string) 
+    string = re.sub(r"\s{2,}", " ", string)    
+    return string.strip().lower()
